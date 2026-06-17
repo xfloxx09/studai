@@ -16,13 +16,20 @@ type ScrapedItem = {
 let idCounter = 0;
 function nextId() { return `v${++idCounter}`; }
 
-async function sleep(ms: number) {
-  return new Promise<void>(resolve => setTimeout(resolve, ms));
+async function sleep(ms: number, signal?: AbortSignal) {
+  return new Promise<void>((resolve, reject) => {
+    if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
+    const timer = setTimeout(() => {
+      if (signal?.aborted) reject(new DOMException("Aborted", "AbortError"));
+      else resolve();
+    }, ms);
+    signal?.addEventListener("abort", () => { clearTimeout(timer); reject(new DOMException("Aborted", "AbortError")); }, { once: true });
+  });
 }
 
 async function runApifyActor(apiKey: string, actorId: string, input: any, signal?: AbortSignal): Promise<any[]> {
   const ac = new AbortController();
-  const timeout = setTimeout(() => ac.abort(), 120000);
+  const timeout = setTimeout(() => ac.abort(), 300000);
   const onAbort = () => { clearTimeout(timeout); ac.abort(); };
   signal?.addEventListener("abort", onAbort, { once: true });
 
@@ -50,8 +57,8 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
     let pollAttempts = 0;
     while (status === "RUNNING" || status === "READY") {
       signal?.throwIfAborted();
-      await sleep(3000);
-      if (++pollAttempts > 60) {
+      await sleep(1500, signal);
+      if (++pollAttempts > 120) {
         throw new Error("Apify run timed out — no status change after 3 minutes");
       }
       const statusResp = await fetch(
