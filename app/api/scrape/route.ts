@@ -101,71 +101,100 @@ function computeScore(play: number, likes: number, comments: number, shares: num
   ));
 }
 
-async function scrapeTikTok(apiKey: string, signal?: AbortSignal): Promise<ScrapedItem[]> {
+const FRESHNESS_MS: Record<string, number> = {
+  "1h": 60 * 60 * 1000,
+  "6h": 6 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "72h": 72 * 60 * 60 * 1000,
+};
+
+function getCutoff(freshness?: string): Date | null {
+  if (!freshness) return null;
+  const ms = FRESHNESS_MS[freshness];
+  if (!ms) return null;
+  return new Date(Date.now() - ms);
+}
+
+async function scrapeTikTok(apiKey: string, cutoff?: Date | null, signal?: AbortSignal): Promise<ScrapedItem[]> {
   const items = await runApifyActor(apiKey, "khadinakbar~tiktok-trending-videos-scraper", {
     maxResults: 50, countryCode: "US",
   }, signal);
 
-  return (items || []).map((item: any) => {
-    const desc = item.description || item.title || "Untitled";
-    const play = item.playCount ?? item.plays ?? 0;
-    const likes = item.likeCount ?? item.likes ?? 0;
-    const comments = item.commentCount ?? item.comments ?? 0;
-    const shares = item.shareCount ?? item.shares ?? 0;
-    const author = item.authorHandle || item.authorUniqueId || "unknown";
-    const vid = item.videoId || item.id || nextId();
-    return {
-      id: `tk-${vid}`, title: desc.slice(0, 200),
-      url: item.videoUrl || item.item_url || `https://www.tiktok.com/@${author}/video/${vid}`,
-      platform: "tiktok", score: computeScore(play, likes, comments, shares),
-      ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
-    };
-  });
+  return (items || [])
+    .filter((item: any) => {
+      if (!cutoff) return true;
+      if (!item.createTime) return true;
+      return new Date(item.createTime) >= cutoff;
+    })
+    .map((item: any) => {
+      const desc = item.description || item.title || "Untitled";
+      const play = item.playCount ?? item.plays ?? 0;
+      const likes = item.likeCount ?? item.likes ?? 0;
+      const comments = item.commentCount ?? item.comments ?? 0;
+      const shares = item.shareCount ?? item.shares ?? 0;
+      const author = item.authorHandle || item.authorUniqueId || "unknown";
+      const vid = item.videoId || item.id || nextId();
+      return {
+        id: `tk-${vid}`, title: desc.slice(0, 200),
+        url: item.videoUrl || item.item_url || `https://www.tiktok.com/@${author}/video/${vid}`,
+        platform: "tiktok", score: computeScore(play, likes, comments, shares),
+        ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+      };
+    });
 }
 
-async function scrapeInstagram(apiKey: string, signal?: AbortSignal): Promise<ScrapedItem[]> {
+async function scrapeInstagram(apiKey: string, cutoff?: Date | null, signal?: AbortSignal): Promise<ScrapedItem[]> {
   const items = await runApifyActor(apiKey, "iron-crawler~instagram-search-reels", {
     query: "trending", maxPages: 1,
   }, signal);
 
-  return (items || []).map((item: any) => {
-    const desc = item.caption || item.description || "Untitled";
-    const play = item.view_count ?? item.playCount ?? 0;
-    const likes = item.like_count ?? item.likes ?? 0;
-    const comments = item.comment_count ?? item.comments ?? 0;
-    const shares = item.share_count ?? item.shares ?? 0;
-    const author = item.username || "unknown";
-    const vid = item.reel_id || item.id || nextId();
-    return {
-      id: `ig-${vid}`, title: desc.slice(0, 200),
-      url: item.video_url || item.url || `https://www.instagram.com/reel/${vid}/`,
-      platform: "instagram", score: computeScore(play, likes, comments, shares),
-      ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
-    };
-  });
+  return (items || [])
+    .map((item: any) => {
+      const desc = item.caption || item.description || "Untitled";
+      const play = item.view_count ?? item.playCount ?? 0;
+      const likes = item.like_count ?? item.likes ?? 0;
+      const comments = item.comment_count ?? item.comments ?? 0;
+      const shares = item.share_count ?? item.shares ?? 0;
+      const author = item.username || "unknown";
+      const vid = item.reel_id || item.id || nextId();
+      return {
+        id: `ig-${vid}`, title: desc.slice(0, 200),
+        url: item.video_url || item.url || `https://www.instagram.com/reel/${vid}/`,
+        platform: "instagram", score: computeScore(play, likes, comments, shares),
+        ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+      };
+    });
 }
 
-async function scrapeYouTube(apiKey: string, signal?: AbortSignal): Promise<ScrapedItem[]> {
+async function scrapeYouTube(apiKey: string, cutoff?: Date | null, signal?: AbortSignal): Promise<ScrapedItem[]> {
+  const sinceStr = cutoff ? cutoff.toISOString().split("T")[0] : "";
   const items = await runApifyActor(apiKey, "celebrated-quadraphonic~youtube-shorts-scraper", {
     mode: "channel", extraMode: "trending", trendingCountry: "US",
-    maxResults: 50, sortBy: "POPULAR", includeChannelInfo: false,
+    maxResults: 50, sortBy: "NEWEST", since: sinceStr,
+    includeChannelInfo: false,
   }, signal);
 
-  return (items || []).map((item: any) => {
-    const desc = item.title || item.description || "Untitled";
-    const play = item.view_count ?? item.views ?? 0;
-    const likes = item.like_count ?? item.likes ?? 0;
-    const comments = item.comment_count ?? item.comments ?? 0;
-    const shares = item.share_count ?? item.shares ?? 0;
-    const author = item.channel_name || item.channelName || "unknown";
-    const vid = item.id || nextId();
-    return {
-      id: `yt-${vid}`, title: desc.slice(0, 200),
-      url: item.url || `https://youtube.com/shorts/${vid}`,
-      platform: "youtube", score: computeScore(play, likes, comments, shares),
-      ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
-    };
-  });
+  return (items || [])
+    .filter((item: any) => {
+      if (!cutoff) return true;
+      if (!item.publish_date) return true;
+      return new Date(item.publish_date) >= cutoff;
+    })
+    .map((item: any) => {
+      const desc = item.title || item.description || "Untitled";
+      const play = item.view_count ?? item.views ?? 0;
+      const likes = item.like_count ?? item.likes ?? 0;
+      const comments = item.comment_count ?? item.comments ?? 0;
+      const shares = item.share_count ?? item.shares ?? 0;
+      const author = item.channel_name || item.channelName || "unknown";
+      const vid = item.id || nextId();
+      return {
+        id: `yt-${vid}`, title: desc.slice(0, 200),
+        url: item.url || `https://youtube.com/shorts/${vid}`,
+        platform: "youtube", score: computeScore(play, likes, comments, shares),
+        ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+      };
+    });
 }
 
 function fmt(n: number): string {
@@ -179,7 +208,7 @@ const PROVIDER_PLATFORMS: Record<string, string[]> = {
   ensembledata: ["tiktok", "instagram", "youtube", "facebook"],
 };
 
-const PLATFORM_SCRAPERS: Record<string, (apiKey: string, signal?: AbortSignal) => Promise<ScrapedItem[]>> = {
+const PLATFORM_SCRAPERS: Record<string, (apiKey: string, cutoff?: Date | null, signal?: AbortSignal) => Promise<ScrapedItem[]>> = {
   tiktok: scrapeTikTok,
   instagram: scrapeInstagram,
   youtube: scrapeYouTube,
@@ -187,7 +216,8 @@ const PLATFORM_SCRAPERS: Record<string, (apiKey: string, signal?: AbortSignal) =
 
 export async function POST(request: Request) {
   try {
-    const { platforms } = await request.json();
+    const { platforms, freshness } = await request.json();
+    const cutoff = getCutoff(freshness);
 
     const activeProvider = await prisma.providerConfig.findFirst({
       where: { category: "scraper", active: true, connected: true },
@@ -218,9 +248,8 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "No scraper available for the selected platforms." }, { status: 400 });
       }
 
-      // Run each platform's scraper in parallel
       const results = await Promise.all(
-        toScrape.map((p: string) => PLATFORM_SCRAPERS[p](activeProvider.apiKey!, request.signal))
+        toScrape.map((p: string) => PLATFORM_SCRAPERS[p](activeProvider.apiKey!, cutoff, request.signal))
       );
 
       return NextResponse.json(results.flat());
