@@ -54,10 +54,9 @@ export async function PATCH(request: Request) {
             where: { category: existing.category, active: true },
             data: { active: false },
           }),
-          prisma.providerConfig.upsert({
+          prisma.providerConfig.update({
             where: { id },
-            update: { active: true },
-            create: { id, active: true, category: existing.category, name: existing.name },
+            data: { active: true },
           }),
         ]);
         const updated = await prisma.providerConfig.findUnique({ where: { id } });
@@ -65,10 +64,9 @@ export async function PATCH(request: Request) {
       }
     }
 
-    const updated = await prisma.providerConfig.upsert({
+    const updated = await prisma.providerConfig.update({
       where: { id },
-      update: fields,
-      create: { id, ...fields },
+      data: fields,
     });
 
     return NextResponse.json(updated);
