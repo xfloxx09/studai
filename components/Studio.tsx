@@ -1,23 +1,42 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { PLATFORMS, FRESHNESS, scoreStyle, Card, SectionLabel, Pill, Btn, TextField, Skeleton } from './shared';
 
 /* ───────────────────────── Step 1 Scrape ───────────────────────── */
 
 function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped, setScraped, selected, setSelected, scanning, setScanning, onContinue }: any) {
+  const abortRef = useRef<AbortController | null>(null);
+  const [progress, setProgress] = useState(0);
+
   const togglePlatform = (id: string) => setPlatforms((prev: string[]) => prev.includes(id) ? prev.filter((p: string) => p !== id) : [...prev, id]);
   const toggleSelect = (item: any) => setSelected((prev: any[]) => prev.find((i: any) => i.id === item.id) ? prev.filter((i: any) => i.id !== item.id) : [...prev, item]);
+
+  const cancel = () => {
+    abortRef.current?.abort();
+    abortRef.current = null;
+  };
 
   const runScrape = async () => {
     setScanning(true);
     setScraped([]);
     setSelected([]);
+    setProgress(0);
+
+    const ac = new AbortController();
+    abortRef.current = ac;
+
+    // animate progress bar
+    const prog = setInterval(() => setProgress(p => Math.min(p + 2, 92)), 800);
+
     try {
       const res = await fetch("/api/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ platforms, freshness }),
+        signal: ac.signal,
       });
+      clearInterval(prog);
+      setProgress(100);
       const data = await res.json();
       if (!res.ok) {
         alert(data.error || "Scrape failed");
@@ -25,11 +44,17 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
         return;
       }
       setScraped(data);
-    } catch (e) {
-      console.error("Scrape API failed", e);
-      alert("Could not reach the scrape API. Make sure the backend is running.");
+    } catch (e: any) {
+      clearInterval(prog);
+      if (e.name === "AbortError") {
+        alert("Scrape cancelled");
+      } else {
+        console.error("Scrape API failed", e);
+        alert("Could not reach the scrape API. Make sure the backend is running.");
+      }
     }
     setScanning(false);
+    abortRef.current = null;
   };
 
   return (
@@ -62,16 +87,34 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
             );
           })}
         </div>
-        <Btn primary style={{ marginLeft: "auto" }} disabled={scanning || platforms.length === 0} onClick={runScrape}>
-          {scanning ? "Scraping…" : "⚡ Scrape now"}
-        </Btn>
+        {scanning ? (
+          <div style={{ display: "flex", gap: 8, marginLeft: "auto", alignItems: "center" }}>
+            <Btn small onClick={cancel}>Cancel</Btn>
+            <span style={{ fontSize: 11, color: "#7070A0" }}>{progress}%</span>
+          </div>
+        ) : (
+          <Btn primary style={{ marginLeft: "auto" }} disabled={platforms.length === 0} onClick={runScrape}>
+            ⚡ Scrape now
+          </Btn>
+        )}
       </div>
 
-      <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12 }}>
-        Configure a scraping provider in Admin → Scraping providers, then scrape real trending videos.
-      </div>
+      {scanning && (
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ height: 4, background: "#15152A", borderRadius: 2, overflow: "hidden" }}>
+            <div style={{
+              height: "100%", width: `${progress}%`, borderRadius: 2,
+              background: "linear-gradient(90deg,#7B3FE0,#FF3B5C)",
+              transition: "width 0.3s ease",
+            }} />
+          </div>
+          <div style={{ fontSize: 11, color: "#50508A", marginTop: 6 }}>
+            Running Apify TikTok trending actor…
+          </div>
+        </div>
+      )}
 
-      {scanning && Array.from({ length: 5 }).map((_, i) => (
+      {scanning && Array.from({ length: 3 }).map((_, i) => (
         <Card key={i}>
           <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 8 }}>
             <Skeleton w="55%" /><Skeleton w="14%" />
