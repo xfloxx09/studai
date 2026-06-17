@@ -140,6 +140,11 @@ function formatCount(n: number): string {
   return String(n);
 }
 
+const PROVIDER_PLATFORMS: Record<string, string[]> = {
+  apify: ["tiktok"],
+  ensembledata: ["tiktok", "instagram", "youtube", "facebook"],
+};
+
 export async function POST(request: Request) {
   try {
     const { platforms } = await request.json();
@@ -153,6 +158,14 @@ export async function POST(request: Request) {
         { error: "No scraping provider is configured. Go to Admin → Scraping providers to connect and activate one." },
         { status: 400 }
       );
+    }
+
+    const supported = PROVIDER_PLATFORMS[activeProvider.id] || [];
+    const unsupported = platforms.filter((p: string) => !supported.includes(p));
+    if (unsupported.length > 0) {
+      return NextResponse.json({
+        error: `"${activeProvider.name}" only supports: ${supported.join(", ")}. Unsupported: ${unsupported.join(", ")}. Switch to a different provider in Admin or deselect those platforms.`,
+      }, { status: 400 });
     }
 
     if (activeProvider.id === "apify") {
