@@ -92,57 +92,97 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
   }
 }
 
-async function scrapeWithApify(apiKey: string, platforms: string[], signal?: AbortSignal): Promise<ScrapedItem[]> {
-  const results: ScrapedItem[] = [];
-
-  if (platforms.includes("tiktok")) {
-    // Use khadinakbar/tiktok-trending-videos-scraper which has well-documented field names
-    const items = await runApifyActor(apiKey, "khadinakbar~tiktok-trending-videos-scraper", {
-      maxResults: 50,
-      countryCode: "US",
-    }, signal);
-
-    for (const item of (items || [])) {
-      const desc = item.description || item.title || item.videoDesc || "Untitled";
-      const playCount = item.playCount ?? item.plays ?? 0;
-      const likeCount = item.likeCount ?? item.likes ?? 0;
-      const commentCount = item.commentCount ?? item.comments ?? 0;
-      const shareCount = item.shareCount ?? item.shares ?? 0;
-      const authorName = item.authorHandle || item.authorUniqueId || item.authorName || "unknown";
-      const videoId = item.videoId || item.id || nextId();
-      const score = Math.min(100, Math.round(
-        (Math.log10(Math.max(playCount, 1)) / 8) * 40 +
-        (Math.log10(Math.max(likeCount, 1)) / 7) * 30 +
-        (Math.log10(Math.max(commentCount, 1)) / 5) * 20 +
-        (Math.log10(Math.max(shareCount, 1)) / 4) * 10
-      ));
-
-      results.push({
-        id: `tk-${videoId}`,
-        title: desc.slice(0, 200),
-        url: item.videoUrl || item.item_url || `https://www.tiktok.com/@${authorName}/video/${videoId}`,
-        platform: "tiktok",
-        score,
-        ageLabel: "trending",
-        views: formatCount(playCount),
-        likes: formatCount(likeCount),
-        comments: formatCount(commentCount),
-      });
-    }
-  }
-
-  return results;
+function computeScore(play: number, likes: number, comments: number, shares: number): number {
+  return Math.min(100, Math.round(
+    (Math.log10(Math.max(play, 1)) / 8) * 40 +
+    (Math.log10(Math.max(likes, 1)) / 7) * 30 +
+    (Math.log10(Math.max(comments, 1)) / 5) * 20 +
+    (Math.log10(Math.max(shares, 1)) / 4) * 10
+  ));
 }
 
-function formatCount(n: number): string {
+async function scrapeTikTok(apiKey: string, signal?: AbortSignal): Promise<ScrapedItem[]> {
+  const items = await runApifyActor(apiKey, "khadinakbar~tiktok-trending-videos-scraper", {
+    maxResults: 50, countryCode: "US",
+  }, signal);
+
+  return (items || []).map((item: any) => {
+    const desc = item.description || item.title || "Untitled";
+    const play = item.playCount ?? item.plays ?? 0;
+    const likes = item.likeCount ?? item.likes ?? 0;
+    const comments = item.commentCount ?? item.comments ?? 0;
+    const shares = item.shareCount ?? item.shares ?? 0;
+    const author = item.authorHandle || item.authorUniqueId || "unknown";
+    const vid = item.videoId || item.id || nextId();
+    return {
+      id: `tk-${vid}`, title: desc.slice(0, 200),
+      url: item.videoUrl || item.item_url || `https://www.tiktok.com/@${author}/video/${vid}`,
+      platform: "tiktok", score: computeScore(play, likes, comments, shares),
+      ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+    };
+  });
+}
+
+async function scrapeInstagram(apiKey: string, signal?: AbortSignal): Promise<ScrapedItem[]> {
+  const items = await runApifyActor(apiKey, "iron-crawler~instagram-search-reels", {
+    query: "trending", maxPages: 1,
+  }, signal);
+
+  return (items || []).map((item: any) => {
+    const desc = item.caption || item.description || "Untitled";
+    const play = item.view_count ?? item.playCount ?? 0;
+    const likes = item.like_count ?? item.likes ?? 0;
+    const comments = item.comment_count ?? item.comments ?? 0;
+    const shares = item.share_count ?? item.shares ?? 0;
+    const author = item.username || "unknown";
+    const vid = item.reel_id || item.id || nextId();
+    return {
+      id: `ig-${vid}`, title: desc.slice(0, 200),
+      url: item.video_url || item.url || `https://www.instagram.com/reel/${vid}/`,
+      platform: "instagram", score: computeScore(play, likes, comments, shares),
+      ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+    };
+  });
+}
+
+async function scrapeYouTube(apiKey: string, signal?: AbortSignal): Promise<ScrapedItem[]> {
+  const items = await runApifyActor(apiKey, "celebrated-quadraphonic~youtube-shorts-scraper", {
+    mode: "channel", extraMode: "trending", trendingCountry: "US",
+    maxResults: 50, sortBy: "POPULAR", includeChannelInfo: false,
+  }, signal);
+
+  return (items || []).map((item: any) => {
+    const desc = item.title || item.description || "Untitled";
+    const play = item.view_count ?? item.views ?? 0;
+    const likes = item.like_count ?? item.likes ?? 0;
+    const comments = item.comment_count ?? item.comments ?? 0;
+    const shares = item.share_count ?? item.shares ?? 0;
+    const author = item.channel_name || item.channelName || "unknown";
+    const vid = item.id || nextId();
+    return {
+      id: `yt-${vid}`, title: desc.slice(0, 200),
+      url: item.url || `https://youtube.com/shorts/${vid}`,
+      platform: "youtube", score: computeScore(play, likes, comments, shares),
+      ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+    };
+  });
+}
+
+function fmt(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
   if (n >= 1_000) return (n / 1_000).toFixed(1).replace(/\.0$/, "") + "K";
   return String(n);
 }
 
 const PROVIDER_PLATFORMS: Record<string, string[]> = {
-  apify: ["tiktok"],
+  apify: ["tiktok", "instagram", "youtube"],
   ensembledata: ["tiktok", "instagram", "youtube", "facebook"],
+};
+
+const PLATFORM_SCRAPERS: Record<string, (apiKey: string, signal?: AbortSignal) => Promise<ScrapedItem[]>> = {
+  tiktok: scrapeTikTok,
+  instagram: scrapeInstagram,
+  youtube: scrapeYouTube,
 };
 
 export async function POST(request: Request) {
@@ -164,19 +204,26 @@ export async function POST(request: Request) {
     const unsupported = platforms.filter((p: string) => !supported.includes(p));
     if (unsupported.length > 0) {
       return NextResponse.json({
-        error: `"${activeProvider.name}" only supports: ${supported.join(", ")}. Unsupported: ${unsupported.join(", ")}. Switch to a different provider in Admin or deselect those platforms.`,
+        error: `"${activeProvider.name}" only supports: ${supported.join(", ")}. Unsupported: ${unsupported.join(", ")}.`,
       }, { status: 400 });
     }
 
     if (activeProvider.id === "apify") {
       if (!activeProvider.apiKey) {
-        return NextResponse.json(
-          { error: "Apify is set as active but has no API key saved." },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Apify is set as active but has no API key saved." }, { status: 400 });
       }
-      const results = await scrapeWithApify(activeProvider.apiKey, platforms, request.signal);
-      return NextResponse.json(results);
+
+      const toScrape = platforms.filter((p: string) => PLATFORM_SCRAPERS[p]);
+      if (toScrape.length === 0) {
+        return NextResponse.json({ error: "No scraper available for the selected platforms." }, { status: 400 });
+      }
+
+      // Run each platform's scraper in parallel
+      const results = await Promise.all(
+        toScrape.map((p: string) => PLATFORM_SCRAPERS[p](activeProvider.apiKey!, request.signal))
+      );
+
+      return NextResponse.json(results.flat());
     }
 
     return NextResponse.json(

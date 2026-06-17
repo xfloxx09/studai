@@ -109,7 +109,7 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
             }} />
           </div>
           <div style={{ fontSize: 11, color: "#50508A", marginTop: 6 }}>
-            Running Apify TikTok trending actor…
+            Scraping trending videos…
           </div>
         </div>
       )}
