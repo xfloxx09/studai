@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { PLATFORMS, FRESHNESS, scoreStyle, Card, SectionLabel, Pill, Btn, TextField, Skeleton } from './shared';
 
 /* ───────────────────────── Step 1 Scrape ───────────────────────── */
@@ -287,7 +287,7 @@ function StepEdit({ chosen, fields, setFields, onContinue }: any) {
 
 /* ───────────────────────── Step 4 Publish ───────────────────────── */
 
-function StepPublish({ fields, publishConnections, targets, setTargets, status, setStatus, schedule, setSchedule }: any) {
+function StepPublish({ fields, targets, setTargets, status, setStatus, schedule, setSchedule }: any) {
   const toggleTarget = (id: string) => setTargets((prev: string[]) => prev.includes(id) ? prev.filter((p: string) => p !== id) : [...prev, id]);
 
   const publish = async () => {
@@ -330,16 +330,14 @@ function StepPublish({ fields, publishConnections, targets, setTargets, status, 
 
       <SectionLabel>Publish to</SectionLabel>
       {PLATFORMS.map(p => {
-        const conn = publishConnections.find((c: any) => c.id === p.id);
         const isTarget = targets.includes(p.id);
         const st = status[p.id];
         return (
           <Card key={p.id}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <input type="checkbox" checked={isTarget} disabled={!conn?.connected} onChange={() => toggleTarget(p.id)} style={{ accentColor: p.color }} />
-                <span style={{ fontSize: 13, fontWeight: 700, color: conn?.connected ? "#E0E0F0" : "#40406A" }}>{p.label}</span>
-                {!conn?.connected && <Pill color="#FF6060" bg="#FF606018" border="#FF606033">not connected — set up in Admin</Pill>}
+                <input type="checkbox" checked={isTarget} onChange={() => toggleTarget(p.id)} style={{ accentColor: p.color }} />
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#E0E0F0" }}>{p.label}</span>
               </div>
               {st === "queued" && <Pill color="#FFB800" bg="#FFB80018" border="#FFB80033">queued</Pill>}
               {st === "published" && <Pill color="#4CAF50" bg="#4CAF5018" border="#4CAF5033">published ✓</Pill>}
@@ -370,8 +368,12 @@ function StepPublish({ fields, publishConnections, targets, setTargets, status, 
 
 const STEPS = ["Scrape", "Create", "Edit & manage", "Publish"];
 
-export default function Studio(props: any) {
+export default function Studio() {
   const [step, setStep] = useState(0);
+  const [platforms, setPlatforms] = useState<string[]>(["tiktok", "instagram"]);
+  const [freshness, setFreshness] = useState("24h");
+  const [scraped, setScraped] = useState<any[]>([]);
+  const [scanning, setScanning] = useState(false);
   const [selected, setSelected] = useState<any[]>([]);
   const [options, setOptions] = useState<any>(null);
   const [generating, setGenerating] = useState(false);
@@ -380,6 +382,16 @@ export default function Studio(props: any) {
   const [targets, setTargets] = useState<string[]>([]);
   const [status, setStatus] = useState<any>({});
   const [schedule, setSchedule] = useState("now");
+  const [publishConnections, setPublishConnections] = useState<any[]>([]);
+
+  const activeNarrativeModel = "DeepSeek V4 Flash";
+
+  useEffect(() => {
+    fetch("/api/admin/providers")
+      .then(r => r.json())
+      .then(data => setPublishConnections(data.filter((p: any) => p.category === "publish")))
+      .catch(() => {});
+  }, []);
 
   const goToEdit = () => {
     setFields({
@@ -409,11 +421,11 @@ export default function Studio(props: any) {
 
       {step === 0 && (
         <StepScrape
-          platforms={props.platforms} setPlatforms={props.setPlatforms}
-          freshness={props.freshness} setFreshness={props.setFreshness}
-          scraped={props.scraped} setScraped={props.setScraped}
+          platforms={platforms} setPlatforms={setPlatforms}
+          freshness={freshness} setFreshness={setFreshness}
+          scraped={scraped} setScraped={setScraped}
           selected={selected} setSelected={setSelected}
-          scanning={props.scanning} setScanning={props.setScanning}
+          scanning={scanning} setScanning={setScanning}
           onContinue={() => setStep(1)}
         />
       )}
@@ -423,7 +435,7 @@ export default function Studio(props: any) {
           options={options} setOptions={setOptions}
           generating={generating} setGenerating={setGenerating}
           chosen={chosen} setChosen={setChosen}
-          activeNarrativeModel={props.activeNarrativeModel}
+          activeNarrativeModel={activeNarrativeModel}
           onContinue={goToEdit}
         />
       )}
@@ -437,7 +449,6 @@ export default function Studio(props: any) {
       {step === 3 && (
         <StepPublish
           fields={fields}
-          publishConnections={props.publishConnections}
           targets={targets} setTargets={setTargets}
           status={status} setStatus={setStatus}
           schedule={schedule} setSchedule={setSchedule}

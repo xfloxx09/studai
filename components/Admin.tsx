@@ -1,44 +1,20 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, SectionLabel, Pill, Btn, TextField } from './shared';
-
-/* ───────────────────────── provider catalog (mock defaults) ───────────────────────── */
-
-const initialScrapers = [
-  { id: "ensembledata", name: "EnsembleData", note: "Multi-platform (TikTok+IG+YT+FB), unit pricing", cost: "$100–$1,400/mo · 50 free units/day", connected: true, active: true },
-  { id: "apify", name: "Apify", note: "Actor marketplace, pay-per-result", cost: "$1.70–$2.30 / 1,000 results", connected: true, active: false },
-  { id: "tikhub", name: "TikHub", note: "TikTok-focused, pure pay-as-you-go", cost: "$0.001 / request", connected: false, active: false },
-  { id: "lamatok", name: "Lamatok", note: "TikTok-specialized, cheapest per-request", cost: "$0.0006 / request · 100 free", connected: false, active: false },
-  { id: "scrapecreators", name: "ScrapeCreators", note: "One-time pack option, no subscription", cost: "$47–$497 one-time, or PAYG", connected: false, active: false },
-];
-
-const initialVideoGen = [
-  { id: "kling", name: "Kling AI", note: "Best cost-to-quality, native audio add-on", cost: "from $0.13/sec · $10–$37/mo plans", connected: true, active: true },
-  { id: "hailuo", name: "Hailuo (MiniMax)", note: "Lowest cost-per-finished-clip", cost: "~$0.30 per 10s 1080p clip", connected: true, active: false },
-  { id: "seedance", name: "Seedance 2.0 (via fal.ai)", note: "Highest volume per dollar, audio included", cost: "$0.20/sec @720p w/ audio", connected: false, active: false },
-  { id: "pika", name: "Pika", note: "Cheapest entry subscription", cost: "$8/mo · 5s default clips", connected: false, active: false },
-  { id: "runway", name: "Runway Gen-4", note: "Premium fidelity & control", cost: "$0.10–$0.25/sec", connected: false, active: false },
-];
-
-const initialNarrative = [
-  { id: "deepseek", name: "DeepSeek V4 Flash", note: "Cheapest frontier-tier model, 5M free tokens on signup", cost: "$0.14/M in · $0.28/M out", connected: true, active: true },
-  { id: "claude", name: "Claude Sonnet 4.6", note: "Highest quality narrative & script writing", cost: "premium tier — best for final scripts", connected: true, active: false },
-  { id: "qwen", name: "Qwen (via OpenRouter)", note: "Open-weight alternative, similar pricing tier to DeepSeek", cost: "~$0.15–$0.30/M tokens", connected: false, active: false },
-  { id: "gpt4o", name: "OpenAI GPT-4o", note: "Fallback / comparison model", cost: "mid-tier pricing", connected: false, active: false },
-];
-
-const initialPublish = [
-  { id: "tiktok", name: "TikTok", note: "Content Posting API — free, requires app audit for public posting", connected: false },
-  { id: "instagram", name: "Instagram", note: "Meta Graph API — free, requires Business account + App Review", connected: false },
-  { id: "facebook", name: "Facebook", note: "Meta Graph API — shares App Review with Instagram", connected: false },
-  { id: "youtube", name: "YouTube", note: "YouTube Data API v3 — free quota, OAuth2 required", connected: false },
-];
 
 /* ───────────────────────── Provider row ───────────────────────── */
 
-function ProviderRow({ p, onSetActive, onToggleConnect }: any) {
+function ProviderRow({ p, onSetActive, onToggleConnect, onSaveKey }: any) {
   const [key, setKey] = useState("");
   const [editing, setEditing] = useState(false);
+
+  const handleSave = () => {
+    onSaveKey(p.id, key);
+    onToggleConnect(p.id, true);
+    setEditing(false);
+    setKey("");
+  };
+
   return (
     <Card>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 }}>
@@ -48,7 +24,7 @@ function ProviderRow({ p, onSetActive, onToggleConnect }: any) {
             {p.active && <Pill color="#FFB800" bg="#FFB80018" border="#FFB80033">active</Pill>}
             <span style={{ width: 7, height: 7, borderRadius: "50%", background: p.connected ? "#4CAF50" : "#3A3A50", display: "inline-block" }} />
           </div>
-          <div style={{ fontSize: 11, color: "#50508A", marginTop: 4, lineHeight: 1.5 }}>{p.note}</div>
+          <div style={{ fontSize: 11, color: "#50508A", marginTop: 4 }}>{p.note}</div>
           <div style={{ fontSize: 11, color: "#7060A0", marginTop: 3, fontFamily: "monospace" }}>{p.cost}</div>
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
@@ -60,7 +36,7 @@ function ProviderRow({ p, onSetActive, onToggleConnect }: any) {
         <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #15152A" }}>
           <TextField label="API key" value={key} onChange={setKey} placeholder="sk-••••••••••••••••" type="password" mono />
           <div style={{ display: "flex", gap: 8 }}>
-            <Btn small primary onClick={() => { onToggleConnect(p.id, true); setEditing(false); setKey(""); }}>Save & test connection</Btn>
+            <Btn small primary onClick={handleSave}>Save & test connection</Btn>
             {p.connected && <Btn small onClick={() => { onToggleConnect(p.id, false); setEditing(false); }}>Disconnect</Btn>}
           </div>
         </div>
@@ -69,14 +45,14 @@ function ProviderRow({ p, onSetActive, onToggleConnect }: any) {
   );
 }
 
-function ProviderCategory({ title, hint, providers, setProviders }: any) {
-  const setActive = (id: string) => setProviders((prev: any[]) => prev.map((p: any) => ({ ...p, active: p.id === id })));
-  const toggleConnect = (id: string, val: boolean) => setProviders((prev: any[]) => prev.map((p: any) => p.id === id ? { ...p, connected: val, active: val ? p.active : false } : p));
+function ProviderCategory({ title, hint, providers, onSetActive, onToggleConnect, onSaveKey }: any) {
   return (
     <div style={{ marginBottom: 28 }}>
       <SectionLabel>{title}</SectionLabel>
-      <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12, lineHeight: 1.6 }}>{hint}</div>
-      {providers.map((p: any) => <ProviderRow key={p.id} p={p} onSetActive={setActive} onToggleConnect={toggleConnect} />)}
+      <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12 }}>{hint}</div>
+      {providers.map((p: any) => (
+        <ProviderRow key={p.id} p={p} onSetActive={onSetActive} onToggleConnect={onToggleConnect} onSaveKey={onSaveKey} />
+      ))}
     </div>
   );
 }
@@ -115,36 +91,108 @@ function PublishRow({ p, onToggle }: any) {
 
 /* ───────────────────────── Admin main ───────────────────────── */
 
-export default function Admin(props: any) {
-  const [scrapers, setScrapers] = useState(initialScrapers);
-  const [videoGen, setVideoGen] = useState(initialVideoGen);
-  const [narrative, setNarrative] = useState(initialNarrative);
-  const [publishConnections, setPublishConnections] = useState(initialPublish);
+export default function Admin() {
+  const [providers, setProviders] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const togglePublish = (id: string, val: boolean) =>
-    setPublishConnections((prev: any[]) => prev.map((p: any) => p.id === id ? { ...p, connected: val } : p));
+  useEffect(() => {
+    fetch("/api/admin/providers")
+      .then(r => r.json())
+      .then(data => {
+        setProviders(data);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const saveProvider = async (id: string, fields: any) => {
+    const res = await fetch("/api/admin/providers", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...fields }),
+    });
+    if (res.ok) {
+      const updated = await res.json();
+      setProviders(prev => prev.map(p => (p.id === id ? updated : p)));
+    }
+  };
+
+  const setActive = (id: string) => {
+    // Optimistically deactivate all in same category
+    const p = providers.find(x => x.id === id);
+    if (!p) return;
+    setProviders(prev =>
+      prev.map(x => (x.category === p.category ? { ...x, active: x.id === id } : x))
+    );
+    saveProvider(id, { active: true });
+  };
+
+  const toggleConnect = (id: string, connected: boolean) => {
+    setProviders(prev =>
+      prev.map(p => (p.id === id ? { ...p, connected, active: connected ? p.active : false } : p))
+    );
+    saveProvider(id, { connected, active: false });
+  };
+
+  const saveKey = (id: string, apiKey: string) => {
+    saveProvider(id, { apiKey, connected: true });
+  };
+
+  const togglePublish = (id: string, connected: boolean) => {
+    setProviders(prev =>
+      prev.map(p => (p.id === id ? { ...p, connected } : p))
+    );
+    saveProvider(id, { connected });
+  };
+
+  if (loading) {
+    return <div style={{ textAlign: "center", padding: 40, color: "#50508A" }}>Loading providers…</div>;
+  }
+
+  const scrapers = providers.filter(p => p.category === "scraper");
+  const videoGen = providers.filter(p => p.category === "video-gen");
+  const narrative = providers.filter(p => p.category === "narrative");
+  const publish = providers.filter(p => p.category === "publish");
 
   return (
     <div>
-      <div style={{ fontSize: 11, color: "#40406A", marginBottom: 20, lineHeight: 1.7 }}>
-        Connect multiple providers per category and switch the active one anytime — no code changes, no re-entering keys for providers you've already connected.
+      <div style={{ fontSize: 11, color: "#40406A", marginBottom: 20 }}>
+        Changes are saved to the database automatically. Connect multiple providers per category and switch the active one anytime.
       </div>
 
-      <ProviderCategory title="Scraping providers" hint="Source of trending video data per platform. Switch providers if one gets rate-limited, raises prices, or drops coverage."
-        providers={scrapers} setProviders={setScrapers} />
+      <ProviderCategory
+        title="Scraping providers"
+        hint="Source of trending video data per platform. Switch providers if one gets rate-limited, raises prices, or drops coverage."
+        providers={scrapers}
+        onSetActive={setActive}
+        onToggleConnect={toggleConnect}
+        onSaveKey={saveKey}
+      />
 
-      <ProviderCategory title="Video generation providers" hint="Used if the studio generates supplementary clips, b-roll, or AI avatars rather than filming live."
-        providers={videoGen} setProviders={setVideoGen} />
+      <ProviderCategory
+        title="Video generation providers"
+        hint="Used if the studio generates supplementary clips, b-roll, or AI avatars rather than filming live."
+        providers={videoGen}
+        onSetActive={setActive}
+        onToggleConnect={toggleConnect}
+        onSaveKey={saveKey}
+      />
 
-      <ProviderCategory title="AI narrative / script providers" hint="Builds the cross-video narrative and writes scripts, captions, and hooks. DeepSeek is set active by default for lowest cost."
-        providers={narrative} setProviders={setNarrative} />
+      <ProviderCategory
+        title="AI narrative / script providers"
+        hint="Builds the cross-video narrative and writes scripts, captions, and hooks."
+        providers={narrative}
+        onSetActive={setActive}
+        onToggleConnect={toggleConnect}
+        onSaveKey={saveKey}
+      />
 
       <div>
         <SectionLabel>Direct publishing connections</SectionLabel>
-        <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12, lineHeight: 1.6 }}>
+        <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12 }}>
           OAuth credentials so the studio can upload directly to each platform from the Publish step.
         </div>
-        {publishConnections.map((p: any) => <PublishRow key={p.id} p={p} onToggle={togglePublish} />)}
+        {publish.map((p: any) => <PublishRow key={p.id} p={p} onToggle={togglePublish} />)}
       </div>
     </div>
   );

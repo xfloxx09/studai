@@ -28,9 +28,15 @@ model Project {
   createdAt    DateTime @default(now())
 }
 
-model PublishingConnection {
-  id          String   @id
-  platform    String
-  connected   Boolean  @default(false)
+model ProviderConfig {
+  id        String   @id
+  category  String   // scraper | video-gen | narrative | publish
+  name      String
+  note      String?
+  cost      String?
+  connected Boolean  @default(false)
+  active    Boolean  @default(false)
+  apiKey    String?
   credentials Json?
+  createdAt DateTime @default(now())
 }
