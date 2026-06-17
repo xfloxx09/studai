@@ -11,6 +11,7 @@ type ScrapedItem = {
   views: string;
   likes: string;
   comments: string;
+  createdAt: string | null;
 };
 
 let idCounter = 0;
@@ -122,13 +123,7 @@ async function scrapeTikTok(apiKey: string, cutoff?: Date | null, signal?: Abort
     maxResults: 15, countryCode: "US",
   }, signal);
 
-  return (items || [])
-    .filter((item: any) => {
-      if (!cutoff) return true;
-      if (!item.createTime) return true;
-      return new Date(item.createTime) >= cutoff;
-    })
-    .map((item: any) => {
+  return (items || []).map((item: any) => {
       const desc = String(item.description || item.title || "Untitled");
       const play = item.playCount ?? item.plays ?? 0;
       const likes = item.likeCount ?? item.likes ?? 0;
@@ -141,6 +136,7 @@ async function scrapeTikTok(apiKey: string, cutoff?: Date | null, signal?: Abort
         url: item.videoUrl || item.item_url || `https://www.tiktok.com/@${author}/video/${vid}`,
         platform: "tiktok", score: computeScore(play, likes, comments, shares),
         ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+        createdAt: item.createTime || null,
       };
     });
 }
@@ -164,6 +160,7 @@ async function scrapeInstagram(apiKey: string, cutoff?: Date | null, signal?: Ab
         url: item.video_url || item.url || `https://www.instagram.com/reel/${vid}/`,
         platform: "instagram", score: computeScore(play, likes, comments, shares),
         ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+        createdAt: null,
       };
     });
 }
@@ -176,13 +173,7 @@ async function scrapeYouTube(apiKey: string, cutoff?: Date | null, signal?: Abor
     includeChannelInfo: false,
   }, signal);
 
-  return (items || [])
-    .filter((item: any) => {
-      if (!cutoff) return true;
-      if (!item.publish_date) return true;
-      return new Date(item.publish_date) >= cutoff;
-    })
-    .map((item: any) => {
+  return (items || []).map((item: any) => {
       const desc = String(item.title || item.description || "Untitled");
       const play = item.view_count ?? item.views ?? 0;
       const likes = item.like_count ?? item.likes ?? 0;
@@ -195,6 +186,7 @@ async function scrapeYouTube(apiKey: string, cutoff?: Date | null, signal?: Abor
         url: item.url || `https://youtube.com/shorts/${vid}`,
         platform: "youtube", score: computeScore(play, likes, comments, shares),
         ageLabel: "trending", views: fmt(play), likes: fmt(likes), comments: fmt(comments),
+        createdAt: item.publish_date || null,
       };
     });
 }
