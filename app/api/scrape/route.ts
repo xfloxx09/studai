@@ -58,9 +58,13 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
     if (!runId) throw new Error("Apify did not return a run id");
 
     let status = "RUNNING";
+    let pollAttempts = 0;
     while (status === "RUNNING" || status === "READY") {
       signal?.throwIfAborted();
       await sleep(3000, signal);
+      if (++pollAttempts > 60) {
+        throw new Error("Apify run timed out polling — no status change after 3 minutes");
+      }
       const statusResp = await fetch(
         `https://api.apify.com/v2/actor-runs/${runId}?token=${apiKey}`,
         { signal: ac.signal }
@@ -68,6 +72,8 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
       if (statusResp.ok) {
         const statusData = await statusResp.json();
         status = statusData.data?.status || "FAILED";
+      } else {
+        status = "FAILED";
       }
     }
 
