@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { prisma } from '../../lib/prisma';
 
 const TOPIC_BANK = [
   "POV reaction to unexpected plot twist", "Quick 3-ingredient recipe hack", "Gym form correction breakdown",
@@ -19,10 +20,11 @@ function mockVideoUrl(platform: string, idStr: string) {
 }
 
 function genMockScrape(platform: string, freshness: string) {
-  const maxMin = { "1h": 60, "6h": 360, "24h": 1440, "72h": 4320 }[freshness] || 1440;
+  const maxMin: Record<string, number> = { "1h": 60, "6h": 360, "24h": 1440, "72h": 4320 };
+  const maxMinutes = maxMin[freshness] || 1440;
   const n = 6;
   return Array.from({ length: n }, (_, i) => {
-    const ageMin = Math.floor(Math.random() * maxMin * 0.9) + 5;
+    const ageMin = Math.floor(Math.random() * maxMinutes * 0.9) + 5;
     const ageLabel = ageMin < 60 ? `${ageMin}m ago` : ageMin < 1440 ? `${Math.floor(ageMin / 60)}h ago` : `${Math.floor(ageMin / 1440)}d ago`;
     const recencyBoost = Math.max(0, 30 - Math.floor(ageMin / 20));
     const score = Math.min(99, 52 + recencyBoost + Math.floor(Math.random() * 18));
@@ -45,9 +47,26 @@ function genMockScrape(platform: string, freshness: string) {
 
 export async function POST(request: Request) {
   const { platforms, freshness } = await request.json();
-  
-  // In production, this would call the scraping API based on the active provider
-  const results = (platforms as string[]).flatMap(p => genMockScrape(p, freshness));
-  
-  return NextResponse.json({ results: results.sort((a, b) => b.score - a.score) });
+
+  let allScraped: any[] = [];
+  for (const platformId of platforms) {
+    const scrapedData = genMockScrape(platformId, freshness);
+    allScraped = [...allScraped, ...scrapedData];
+
+    for (const item of scrapedData) {
+      await prisma.scrapedVideo.create({
+        data: {
+          platform: item.platform,
+          title: item.title,
+          url: item.url,
+          score: item.score,
+          views: item.views,
+          likes: item.likes,
+          comments: item.comments,
+        },
+      });
+    }
+  }
+
+  return NextResponse.json(allScraped.sort((a, b) => b.score - a.score));
 }
