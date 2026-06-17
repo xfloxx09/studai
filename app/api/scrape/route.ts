@@ -16,6 +16,10 @@ type ScrapedItem = {
 let idCounter = 0;
 function nextId() { return `v${++idCounter}`; }
 
+async function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms));
+}
+
 async function runApifyActor(apiKey: string, actorId: string, input: any, signal?: AbortSignal): Promise<any[]> {
   const ac = new AbortController();
   const timeout = setTimeout(() => ac.abort(), 120000);
@@ -23,8 +27,8 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
   signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const resp = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apiKey}&timeout=120`,
+    const runResp = await fetch(
+      `https://api.apify.com/v2/acts/${actorId}/runs?token=${apiKey}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -33,12 +37,50 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
       }
     );
 
-    if (!resp.ok) {
-      const txt = await resp.text();
-      throw new Error(`Apify actor failed (${resp.status}): ${txt}`);
+    if (!runResp.ok) {
+      const txt = await runResp.text();
+      throw new Error(`Apify run start failed (${runResp.status}): ${txt}`);
     }
 
-    return await resp.json();
+    const runData = await runResp.json();
+    const runId = runData.data?.id;
+    if (!runId) throw new Error("Apify did not return a run id");
+
+    let status = "RUNNING";
+    let pollAttempts = 0;
+    while (status === "RUNNING" || status === "READY") {
+      signal?.throwIfAborted();
+      await sleep(3000);
+      if (++pollAttempts > 60) {
+        throw new Error("Apify run timed out — no status change after 3 minutes");
+      }
+      const statusResp = await fetch(
+        `https://api.apify.com/v2/actor-runs/${runId}?token=${apiKey}`,
+        { signal: ac.signal }
+      );
+      if (statusResp.ok) {
+        const statusData = await statusResp.json();
+        status = statusData.data?.status || "FAILED";
+      } else {
+        status = "FAILED";
+      }
+    }
+
+    signal?.throwIfAborted();
+
+    if (status !== "SUCCEEDED") {
+      throw new Error(`Apify run ended with status: ${status}`);
+    }
+
+    const itemsResp = await fetch(
+      `https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${apiKey}&format=json`,
+      { signal: ac.signal }
+    );
+    if (!itemsResp.ok) {
+      const txt = await itemsResp.text();
+      throw new Error(`Apify dataset fetch failed (${itemsResp.status}): ${txt}`);
+    }
+    return await itemsResp.json();
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", onAbort);
