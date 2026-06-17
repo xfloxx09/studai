@@ -1,0 +1,36 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model ScrapedVideo {
+  id        String   @id @default(uuid())
+  platform  String
+  title     String
+  url       String
+  score     Int
+  views     Int
+  likes     Int
+  comments  Int
+  createdAt DateTime @default(now())
+}
+
+model Project {
+  id           String   @id @default(uuid())
+  title        String
+  narrative    String
+  selectedVideos Json
+  status       String
+  createdAt    DateTime @default(now())
+}
+
+model PublishingConnection {
+  id          String   @id
+  platform    String
+  connected   Boolean  @default(false)
+  credentials Json?
+}
