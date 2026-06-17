@@ -16,20 +16,6 @@ type ScrapedItem = {
 let idCounter = 0;
 function nextId() { return `v${++idCounter}`; }
 
-async function sleep(ms: number, signal?: AbortSignal) {
-  return new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) return reject(new DOMException("Aborted", "AbortError"));
-    const timer = setTimeout(() => {
-      if (signal?.aborted) reject(new DOMException("Aborted", "AbortError"));
-      else resolve();
-    }, ms);
-    signal?.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(new DOMException("Aborted", "AbortError"));
-    }, { once: true });
-  });
-}
-
 async function runApifyActor(apiKey: string, actorId: string, input: any, signal?: AbortSignal): Promise<any[]> {
   const ac = new AbortController();
   const timeout = setTimeout(() => ac.abort(), 120000);
@@ -37,8 +23,8 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
   signal?.addEventListener("abort", onAbort, { once: true });
 
   try {
-    const runResp = await fetch(
-      `https://api.apify.com/v2/acts/${actorId}/runs?token=${apiKey}`,
+    const resp = await fetch(
+      `https://api.apify.com/v2/acts/${actorId}/run-sync-get-dataset-items?token=${apiKey}&timeout=120`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -46,52 +32,13 @@ async function runApifyActor(apiKey: string, actorId: string, input: any, signal
         signal: ac.signal,
       }
     );
-    clearTimeout(timeout);
 
-    if (!runResp.ok) {
-      const txt = await runResp.text();
-      throw new Error(`Apify run start failed (${runResp.status}): ${txt}`);
+    if (!resp.ok) {
+      const txt = await resp.text();
+      throw new Error(`Apify actor failed (${resp.status}): ${txt}`);
     }
 
-    const runData = await runResp.json();
-    const runId = runData.data?.id;
-    if (!runId) throw new Error("Apify did not return a run id");
-
-    let status = "RUNNING";
-    let pollAttempts = 0;
-    while (status === "RUNNING" || status === "READY") {
-      signal?.throwIfAborted();
-      await sleep(3000, signal);
-      if (++pollAttempts > 60) {
-        throw new Error("Apify run timed out polling — no status change after 3 minutes");
-      }
-      const statusResp = await fetch(
-        `https://api.apify.com/v2/actor-runs/${runId}?token=${apiKey}`,
-        { signal: ac.signal }
-      );
-      if (statusResp.ok) {
-        const statusData = await statusResp.json();
-        status = statusData.data?.status || "FAILED";
-      } else {
-        status = "FAILED";
-      }
-    }
-
-    signal?.throwIfAborted();
-
-    if (status !== "SUCCEEDED") {
-      throw new Error(`Apify run ended with status: ${status}`);
-    }
-
-    const itemsResp = await fetch(
-      `https://api.apify.com/v2/actor-runs/${runId}/dataset/items?token=${apiKey}&format=json`,
-      { signal: ac.signal }
-    );
-    if (!itemsResp.ok) {
-      const txt = await itemsResp.text();
-      throw new Error(`Apify dataset fetch failed (${itemsResp.status}): ${txt}`);
-    }
-    return await itemsResp.json();
+    return await resp.json();
   } finally {
     clearTimeout(timeout);
     signal?.removeEventListener("abort", onAbort);
@@ -123,7 +70,7 @@ function getCutoff(freshness?: string): Date | null {
 
 async function scrapeTikTok(apiKey: string, cutoff?: Date | null, signal?: AbortSignal): Promise<ScrapedItem[]> {
   const items = await runApifyActor(apiKey, "khadinakbar~tiktok-trending-videos-scraper", {
-    maxResults: 50, countryCode: "US",
+    maxResults: 15, countryCode: "US",
   }, signal);
 
   return (items || [])
@@ -176,7 +123,7 @@ async function scrapeYouTube(apiKey: string, cutoff?: Date | null, signal?: Abor
   const sinceStr = cutoff ? cutoff.toISOString().split("T")[0] : "";
   const items = await runApifyActor(apiKey, "celebrated-quadraphonic~youtube-shorts-scraper", {
     mode: "channel", extraMode: "trending", trendingCountry: "US",
-    maxResults: 50, sortBy: "NEWEST", since: sinceStr,
+    maxResults: 15, sortBy: "NEWEST", since: sinceStr,
     includeChannelInfo: false,
   }, signal);
 
