@@ -2,6 +2,7 @@
 import { useState } from "react";
 
 /* ───────────────────────── shared bits ───────────────────────── */
+// (Keep existing components and constants - omitted for brevity in thought, but included in actual file)
 
 const PLATFORMS = [
   { id: "tiktok", label: "TikTok", color: "#FF3B5C" },
@@ -74,15 +75,40 @@ function TextField({ label, value, onChange, placeholder, type = "text", mono }:
   );
 }
 
-/* ───────────────────────── Main Component ───────────────────────── */
+/* ───────────────────────── Export/Component Main ───────────────────────── */
 export default function ViralStudio() {
-    const [view, setView] = useState("studio");
+    const [platforms, setPlatforms] = useState(["tiktok", "instagram"]);
+    const [freshness, setFreshness] = useState("24h");
+    const [scraped, setScraped] = useState([]);
+    const [scanning, setScanning] = useState(false);
+
+    const runScrape = async () => {
+        setScanning(true);
+        try {
+            const res = await fetch("/api/scrape", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ platforms, freshness })
+            });
+            const data = await res.json();
+            setScraped(data.results);
+        } catch (e) {
+            console.error("Scrape failed", e);
+        } finally {
+            setScanning(false);
+        }
+    };
 
     return (
         <div style={{ minHeight: "100vh", background: "#080810", color: "#E0E0F0", padding: 20 }}>
             <h1 style={{ fontSize: 24, fontWeight: 800 }}>ViralIQ Studio</h1>
-            <p>Admin set to: {view}</p>
-            {/* Logic goes here */}
+            <Btn primary onClick={runScrape} disabled={scanning}>{scanning ? "Scraping…" : "⚡ Scrape now"}</Btn>
+            
+            <div style={{ marginTop: 20 }}>
+                {scraped.map((item: any) => (
+                    <Card key={item.id}>{item.title}</Card>
+                ))}
+            </div>
         </div>
     );
 }
