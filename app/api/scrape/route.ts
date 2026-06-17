@@ -80,12 +80,12 @@ async function scrapeTikTok(apiKey: string, cutoff?: Date | null, signal?: Abort
       return new Date(item.createTime) >= cutoff;
     })
     .map((item: any) => {
-      const desc = item.description || item.title || "Untitled";
+      const desc = String(item.description || item.title || "Untitled");
       const play = item.playCount ?? item.plays ?? 0;
       const likes = item.likeCount ?? item.likes ?? 0;
       const comments = item.commentCount ?? item.comments ?? 0;
       const shares = item.shareCount ?? item.shares ?? 0;
-      const author = item.authorHandle || item.authorUniqueId || "unknown";
+      const author = String(item.authorHandle || item.authorUniqueId || "unknown");
       const vid = item.videoId || item.id || nextId();
       return {
         id: `tk-${vid}`, title: desc.slice(0, 200),
@@ -103,12 +103,12 @@ async function scrapeInstagram(apiKey: string, cutoff?: Date | null, signal?: Ab
 
   return (items || [])
     .map((item: any) => {
-      const desc = item.caption || item.description || "Untitled";
+      const desc = String(item.caption || item.description || "Untitled");
       const play = item.view_count ?? item.playCount ?? 0;
       const likes = item.like_count ?? item.likes ?? 0;
       const comments = item.comment_count ?? item.comments ?? 0;
       const shares = item.share_count ?? item.shares ?? 0;
-      const author = item.username || "unknown";
+      const author = String(item.username || "unknown");
       const vid = item.reel_id || item.id || nextId();
       return {
         id: `ig-${vid}`, title: desc.slice(0, 200),
@@ -134,12 +134,12 @@ async function scrapeYouTube(apiKey: string, cutoff?: Date | null, signal?: Abor
       return new Date(item.publish_date) >= cutoff;
     })
     .map((item: any) => {
-      const desc = item.title || item.description || "Untitled";
+      const desc = String(item.title || item.description || "Untitled");
       const play = item.view_count ?? item.views ?? 0;
       const likes = item.like_count ?? item.likes ?? 0;
       const comments = item.comment_count ?? item.comments ?? 0;
       const shares = item.share_count ?? item.shares ?? 0;
-      const author = item.channel_name || item.channelName || "unknown";
+      const author = String(item.channel_name || item.channelName || "unknown");
       const vid = item.id || nextId();
       return {
         id: `yt-${vid}`, title: desc.slice(0, 200),
