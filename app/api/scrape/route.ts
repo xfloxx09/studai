@@ -1,72 +1,13 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '../../lib/prisma';
 
-const TOPIC_BANK = [
-  "POV reaction to unexpected plot twist", "Quick 3-ingredient recipe hack", "Gym form correction breakdown",
-  "Relationship red flag countdown", "Money-saving grocery trick", "Before/after room transformation",
-  "Unboxing a surprise package", "Day in the life of a night-shift nurse", "AI tool nobody is talking about yet",
-  "Storytime: awkward first date", "Pet doing something unexpectedly smart", "Life hack using everyday objects",
-  "Rating the most hyped fast food item", "Breaking down a viral conspiracy claim", "Outfit transition trend remix",
-];
-
-function mockVideoUrl(platform: string, idStr: string) {
-  switch (platform) {
-    case "tiktok": return `https://www.tiktok.com/@creator/video/7${idStr}`;
-    case "instagram": return `https://www.instagram.com/reel/${idStr}/`;
-    case "facebook": return `https://www.facebook.com/reel/${idStr}`;
-    case "youtube": return `https://www.youtube.com/shorts/${idStr}`;
-    default: return "#";
-  }
-}
-
-function genMockScrape(platform: string, freshness: string) {
-  const maxMin: Record<string, number> = { "1h": 60, "6h": 360, "24h": 1440, "72h": 4320 };
-  const maxMinutes = maxMin[freshness] || 1440;
-  const n = 6;
-  return Array.from({ length: n }, (_, i) => {
-    const ageMin = Math.floor(Math.random() * maxMinutes * 0.9) + 5;
-    const ageLabel = ageMin < 60 ? `${ageMin}m ago` : ageMin < 1440 ? `${Math.floor(ageMin / 60)}h ago` : `${Math.floor(ageMin / 1440)}d ago`;
-    const recencyBoost = Math.max(0, 30 - Math.floor(ageMin / 20));
-    const score = Math.min(99, 52 + recencyBoost + Math.floor(Math.random() * 18));
-    const views = Math.floor((score / 100) * 9000000 + Math.random() * 500000);
-    const idStr = Math.random().toString(36).slice(2, 12);
-    return {
-      id: `${platform}-${i}-${Date.now()}`,
-      platform,
-      title: TOPIC_BANK[Math.floor(Math.random() * TOPIC_BANK.length)],
-      url: mockVideoUrl(platform, idStr),
-      ageLabel,
-      ageMin,
-      score,
-      views,
-      likes: Math.floor(views * (0.04 + Math.random() * 0.06)),
-      comments: Math.floor(views * (0.002 + Math.random() * 0.004)),
-    };
-  }).sort((a, b) => b.score - a.score);
-}
-
 export async function POST(request: Request) {
   const { platforms, freshness } = await request.json();
 
-  let allScraped: any[] = [];
-  for (const platformId of platforms) {
-    const scrapedData = genMockScrape(platformId, freshness);
-    allScraped = [...allScraped, ...scrapedData];
-
-    for (const item of scrapedData) {
-      await prisma.scrapedVideo.create({
-        data: {
-          platform: item.platform,
-          title: item.title,
-          url: item.url,
-          score: item.score,
-          views: item.views,
-          likes: item.likes,
-          comments: item.comments,
-        },
-      });
-    }
-  }
-
-  return NextResponse.json(allScraped.sort((a, b) => b.score - a.score));
+  // TODO: Integrate with a real scraping provider (e.g., EnsembleData, Apify, TikHub)
+  // For now, reject with a setup error.
+  return NextResponse.json(
+    { error: "No scraping provider is configured. Go to Admin → Scraping providers to connect and activate one." },
+    { status: 400 }
+  );
 }

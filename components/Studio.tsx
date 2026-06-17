@@ -2,57 +2,6 @@
 import { useState } from "react";
 import { PLATFORMS, FRESHNESS, scoreStyle, Card, SectionLabel, Pill, Btn, TextField, Skeleton } from './shared';
 
-/* ───────────────────────── helpers ───────────────────────── */
-
-const TOPIC_BANK = [
-  "POV reaction to unexpected plot twist", "Quick 3-ingredient recipe hack", "Gym form correction breakdown",
-  "Relationship red flag countdown", "Money-saving grocery trick", "Before/after room transformation",
-  "Unboxing a surprise package", "Day in the life of a night-shift nurse", "AI tool nobody is talking about yet",
-  "Storytime: awkward first date", "Pet doing something unexpectedly smart", "Life hack using everyday objects",
-  "Rating the most hyped fast food item", "Breaking down a viral conspiracy claim", "Outfit transition trend remix",
-];
-
-function mockVideoUrl(platform: string, idStr: string) {
-  switch (platform) {
-    case "tiktok": return `https://www.tiktok.com/@creator/video/7${idStr}`;
-    case "instagram": return `https://www.instagram.com/reel/${idStr}/`;
-    case "facebook": return `https://www.facebook.com/reel/${idStr}`;
-    case "youtube": return `https://www.youtube.com/shorts/${idStr}`;
-    default: return "#";
-  }
-}
-
-function fmtViews(n: number) {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + "M";
-  if (n >= 1000) return (n / 1000).toFixed(0) + "K";
-  return n;
-}
-
-function genMockScrape(platform: string, freshness: string) {
-  const maxMin = { "1h": 60, "6h": 360, "24h": 1440, "72h": 4320 }[freshness] ?? 1440;
-  const n = 6;
-  return Array.from({ length: n }, (_, i) => {
-    const ageMin = Math.floor(Math.random() * maxMin * 0.9) + 5;
-    const ageLabel = ageMin < 60 ? `${ageMin}m ago` : ageMin < 1440 ? `${Math.floor(ageMin / 60)}h ago` : `${Math.floor(ageMin / 1440)}d ago`;
-    const recencyBoost = Math.max(0, 30 - Math.floor(ageMin / 20));
-    const score = Math.min(99, 52 + recencyBoost + Math.floor(Math.random() * 18));
-    const views = Math.floor((score / 100) * 9000000 + Math.random() * 500000);
-    const idStr = Math.random().toString(36).slice(2, 12);
-    return {
-      id: `${platform}-${i}-${Date.now()}`,
-      platform,
-      title: TOPIC_BANK[Math.floor(Math.random() * TOPIC_BANK.length)],
-      url: mockVideoUrl(platform, idStr),
-      ageLabel,
-      ageMin,
-      score,
-      views,
-      likes: Math.floor(views * (0.04 + Math.random() * 0.06)),
-      comments: Math.floor(views * (0.002 + Math.random() * 0.004)),
-    };
-  }).sort((a, b) => b.score - a.score);
-}
-
 /* ───────────────────────── Step 1 Scrape ───────────────────────── */
 
 function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped, setScraped, selected, setSelected, scanning, setScanning, onContinue }: any) {
@@ -69,15 +18,16 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ platforms, freshness }),
       });
-      const all = await res.json();
-      setScraped(all);
+      const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Scrape failed");
+        setScanning(false);
+        return;
+      }
+      setScraped(data);
     } catch (e) {
-      console.error("Scrape API failed, using fallback mock", e);
-      // fallback to client-side mock
-      setTimeout(() => {
-        const all = platforms.flatMap((p: string) => genMockScrape(p, freshness));
-        setScraped(all.sort((a: any, b: any) => b.score - a.score));
-      }, 800);
+      console.error("Scrape API failed", e);
+      alert("Could not reach the scrape API. Make sure the backend is running.");
     }
     setScanning(false);
   };
@@ -118,7 +68,7 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
       </div>
 
       <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12 }}>
-        Pulls only videos published within the selected window, ranked by virality score. Select the gems you want to feed into the narrative builder, or open ↗ to watch the original post.
+        Configure a scraping provider in Admin → Scraping providers, then scrape real trending videos.
       </div>
 
       {scanning && Array.from({ length: 5 }).map((_, i) => (
@@ -159,9 +109,9 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
                 <div style={{ display: "flex", gap: 10, fontSize: 11, color: "#50508A" }}>
                   <span style={{ color: plat?.color }}>{plat?.label}</span>
                   <span>{item.ageLabel}</span>
-                  <span>👁 {fmtViews(item.views)}</span>
-                  <span>❤ {fmtViews(item.likes)}</span>
-                  <span>💬 {fmtViews(item.comments)}</span>
+                  <span>{item.views}</span>
+                  <span>{item.likes}</span>
+                  <span>{item.comments}</span>
                 </div>
               </div>
             </div>
@@ -188,7 +138,7 @@ function StepCreate({ selected, options, setOptions, generating, setGenerating, 
     setOptions(null);
     setChosen(null);
     try {
-      const list = selected.map((s: any) => `- [${s.platform}] "${s.title}" — score ${s.score}, ${fmtViews(s.views)} views, ${s.ageLabel}`).join("\n");
+      const list = selected.map((s: any) => `- [${s.platform}] "${s.title}" — score ${s.score}, ${s.views} views, ${s.ageLabel}`).join("\n");
       const res = await fetch("/api/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -197,17 +147,15 @@ function StepCreate({ selected, options, setOptions, generating, setGenerating, 
         }),
       });
       const data = await res.json();
+      if (!res.ok) {
+        alert(data.error || "Generation failed");
+        setGenerating(false);
+        return;
+      }
       setOptions(JSON.parse(data.text));
     } catch (e) {
-      // fallback
-      setOptions({
-        narrative: "Generation failed — using fallback mock.",
-        options: [
-          { id: "opt1", title: "Mock Concept 1", angle: "The angle", hook: "The hook", format: "POV", whyItWorks: "It works." },
-          { id: "opt2", title: "Mock Concept 2", angle: "The angle 2", hook: "The hook 2", format: "Storytime", whyItWorks: "It works too." },
-          { id: "opt3", title: "Mock Concept 3", angle: "The angle 3", hook: "The hook 3", format: "Reaction", whyItWorks: "Also works." },
-        ],
-      });
+      console.error("Generation API failed", e);
+      alert("Could not reach the generate API. Configure an AI narrative provider in Admin.");
     }
     setGenerating(false);
   };
@@ -348,19 +296,25 @@ function StepPublish({ fields, publishConnections, targets, setTargets, status, 
     setStatus(st);
 
     try {
-      await fetch("/api/publish", {
+      const res = await fetch("/api/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ fields, targets, schedule }),
       });
+      const data = await res.json();
+      if (res.ok) {
+        targets.forEach((id: string) => {
+          setTimeout(() => setStatus((prev: any) => ({ ...prev, [id]: "published" })), 900);
+        });
+      } else {
+        alert(data.error || "Publish failed");
+        setStatus({});
+      }
     } catch (e) {
       console.error("Publish failed", e);
+      alert("Publish API call failed.");
+      setStatus({});
     }
-
-    // simulate publishing
-    targets.forEach((id: string, i: number) => {
-      setTimeout(() => setStatus((prev: any) => ({ ...prev, [id]: "published" })), 900 + i * 600);
-    });
   };
 
   return (
@@ -431,15 +385,14 @@ export default function Studio(props: any) {
     setFields({
       title: chosen.title,
       description: `${chosen.angle} ${chosen.hook}`,
-      hashtags: ["viral", "fyp", chosen.format.toLowerCase().replace(/\s+/g, "")],
-      cta: "Comment your take below 👇",
+      hashtags: [],
+      cta: "",
     });
     setStep(2);
   };
 
   return (
     <div>
-      {/* stepper */}
       <div style={{ display: "flex", borderBottom: "1px solid #15152A", background: "#09091A", marginBottom: 18 }}>
         {STEPS.map((s, i) => (
           <button key={s} onClick={() => i <= step ? setStep(i) : null}
