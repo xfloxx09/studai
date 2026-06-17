@@ -2,6 +2,20 @@
 import { useState, useEffect, useRef } from "react";
 import { PLATFORMS, FRESHNESS, scoreStyle, Card, SectionLabel, Pill, Btn, TextField, Skeleton } from './shared';
 
+const FRESHNESS_MS: Record<string, number> = {
+  "1h": 60 * 60 * 1000,
+  "6h": 6 * 60 * 60 * 1000,
+  "24h": 24 * 60 * 60 * 1000,
+  "72h": 72 * 60 * 60 * 1000,
+};
+
+function passesFreshness(item: any, freshness: string): boolean {
+  if (freshness === "all" || !item.createdAt) return true;
+  const ms = FRESHNESS_MS[freshness];
+  if (!ms) return true;
+  return Date.now() - new Date(item.createdAt).getTime() <= ms;
+}
+
 /* ───────────────────────── Step 1 Scrape ───────────────────────── */
 
 function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped, setScraped, selected, setSelected, scanning, setScanning, onContinue }: any) {
@@ -130,7 +144,19 @@ function StepScrape({ platforms, setPlatforms, freshness, setFreshness, scraped,
         </div>
       )}
 
-      {scraped.map((item: any) => {
+      {scraped.length > 0 && freshness !== "all" && (
+        <div style={{ fontSize: 11, color: "#7070A0", marginBottom: 10 }}>
+          {(() => {
+            const total = scraped.length;
+            const shown = scraped.filter((i: any) => passesFreshness(i, freshness)).length;
+            const hidden = total - shown;
+            if (hidden === 0) return `All ${total} videos are within the selected time window`;
+            return `Showing ${shown} of ${total} (${hidden} older than ${FRESHNESS.find(f => f.id === freshness)?.label.toLowerCase() || freshness})`;
+          })()}
+        </div>
+      )}
+
+      {scraped.filter((i: any) => passesFreshness(i, freshness)).map((item: any) => {
         const sc = scoreStyle(item.score);
         const isSel = !!selected.find((i: any) => i.id === item.id);
         const plat = PLATFORMS.find(p => p.id === item.platform);

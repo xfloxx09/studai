@@ -10,6 +10,7 @@ export const PLATFORMS = [
 ];
 
 export const FRESHNESS = [
+  { id: "all", label: "All time" },
   { id: "1h", label: "Last hour" },
   { id: "6h", label: "Last 6h" },
   { id: "24h", label: "Last 24h" },
