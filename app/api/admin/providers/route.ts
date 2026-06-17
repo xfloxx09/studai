@@ -38,29 +38,41 @@ export async function GET() {
 }
 
 export async function PATCH(request: Request) {
-  const body = await request.json();
-  const { id, ...fields } = body;
+  try {
+    const body = await request.json();
+    const { id, ...fields } = body;
 
-  if (!id) {
-    return NextResponse.json({ error: "Missing provider id" }, { status: 400 });
-  }
-
-  // If setting this provider active, deactivate others in the same category
-  if (fields.active === true) {
-    const existing = await prisma.providerConfig.findUnique({ where: { id } });
-    if (existing) {
-      await prisma.providerConfig.updateMany({
-        where: { category: existing.category, active: true },
-        data: { active: false },
-      });
+    if (!id) {
+      return NextResponse.json({ error: "Missing provider id" }, { status: 400 });
     }
+
+    if (fields.active === true) {
+      const existing = await prisma.providerConfig.findUnique({ where: { id } });
+      if (existing) {
+        await prisma.$transaction([
+          prisma.providerConfig.updateMany({
+            where: { category: existing.category, active: true },
+            data: { active: false },
+          }),
+          prisma.providerConfig.upsert({
+            where: { id },
+            update: { active: true },
+            create: { id, active: true, category: existing.category, name: existing.name },
+          }),
+        ]);
+        const updated = await prisma.providerConfig.findUnique({ where: { id } });
+        return NextResponse.json(updated);
+      }
+    }
+
+    const updated = await prisma.providerConfig.upsert({
+      where: { id },
+      update: fields,
+      create: { id, ...fields },
+    });
+
+    return NextResponse.json(updated);
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "Internal server error" }, { status: 500 });
   }
-
-  const updated = await prisma.providerConfig.upsert({
-    where: { id },
-    update: fields,
-    create: { id, ...fields },
-  });
-
-  return NextResponse.json(updated);
 }

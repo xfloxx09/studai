@@ -4,15 +4,19 @@ import { Card, SectionLabel, Pill, Btn, TextField } from './shared';
 
 /* ───────────────────────── Provider row ───────────────────────── */
 
-function ProviderRow({ p, onSetActive, onToggleConnect, onSaveKey }: any) {
+function ProviderRow({ p, onSetActive, onDisconnect, onSaveKey }: any) {
   const [key, setKey] = useState("");
   const [editing, setEditing] = useState(false);
 
   const handleSave = () => {
     onSaveKey(p.id, key);
-    onToggleConnect(p.id, true);
     setEditing(false);
     setKey("");
+  };
+
+  const openEditor = () => {
+    setKey(p.apiKey || "");
+    setEditing(true);
   };
 
   return (
@@ -29,7 +33,7 @@ function ProviderRow({ p, onSetActive, onToggleConnect, onSaveKey }: any) {
         </div>
         <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
           {p.connected && !p.active && <Btn small onClick={() => onSetActive(p.id)}>Set active</Btn>}
-          <Btn small onClick={() => setEditing(e => !e)}>{p.connected ? "Edit key" : "Connect"}</Btn>
+          <Btn small onClick={openEditor}>{p.connected ? "Edit key" : "Connect"}</Btn>
         </div>
       </div>
       {editing && (
@@ -37,7 +41,7 @@ function ProviderRow({ p, onSetActive, onToggleConnect, onSaveKey }: any) {
           <TextField label="API key" value={key} onChange={setKey} placeholder="sk-••••••••••••••••" type="password" mono />
           <div style={{ display: "flex", gap: 8 }}>
             <Btn small primary onClick={handleSave}>Save & test connection</Btn>
-            {p.connected && <Btn small onClick={() => { onToggleConnect(p.id, false); setEditing(false); }}>Disconnect</Btn>}
+            {p.connected && <Btn small onClick={() => { onDisconnect(p.id); setEditing(false); }}>Disconnect</Btn>}
           </div>
         </div>
       )}
@@ -45,13 +49,13 @@ function ProviderRow({ p, onSetActive, onToggleConnect, onSaveKey }: any) {
   );
 }
 
-function ProviderCategory({ title, hint, providers, onSetActive, onToggleConnect, onSaveKey }: any) {
+function ProviderCategory({ title, hint, providers, onSetActive, onDisconnect, onSaveKey }: any) {
   return (
     <div style={{ marginBottom: 28 }}>
       <SectionLabel>{title}</SectionLabel>
       <div style={{ fontSize: 11, color: "#40406A", marginBottom: 12 }}>{hint}</div>
       {providers.map((p: any) => (
-        <ProviderRow key={p.id} p={p} onSetActive={onSetActive} onToggleConnect={onToggleConnect} onSaveKey={onSaveKey} />
+        <ProviderRow key={p.id} p={p} onSetActive={onSetActive} onDisconnect={onDisconnect} onSaveKey={onSaveKey} />
       ))}
     </div>
   );
@@ -114,11 +118,12 @@ export default function Admin() {
     if (res.ok) {
       const updated = await res.json();
       setProviders(prev => prev.map(p => (p.id === id ? updated : p)));
+    } else {
+      alert("Failed to save: " + (await res.text()));
     }
   };
 
   const setActive = (id: string) => {
-    // Optimistically deactivate all in same category
     const p = providers.find(x => x.id === id);
     if (!p) return;
     setProviders(prev =>
@@ -127,11 +132,11 @@ export default function Admin() {
     saveProvider(id, { active: true });
   };
 
-  const toggleConnect = (id: string, connected: boolean) => {
+  const disconnect = (id: string) => {
     setProviders(prev =>
-      prev.map(p => (p.id === id ? { ...p, connected, active: connected ? p.active : false } : p))
+      prev.map(p => (p.id === id ? { ...p, connected: false, active: false } : p))
     );
-    saveProvider(id, { connected, active: false });
+    saveProvider(id, { connected: false, active: false });
   };
 
   const saveKey = (id: string, apiKey: string) => {
@@ -165,7 +170,7 @@ export default function Admin() {
         hint="Source of trending video data per platform. Switch providers if one gets rate-limited, raises prices, or drops coverage."
         providers={scrapers}
         onSetActive={setActive}
-        onToggleConnect={toggleConnect}
+        onDisconnect={disconnect}
         onSaveKey={saveKey}
       />
 
@@ -174,7 +179,7 @@ export default function Admin() {
         hint="Used if the studio generates supplementary clips, b-roll, or AI avatars rather than filming live."
         providers={videoGen}
         onSetActive={setActive}
-        onToggleConnect={toggleConnect}
+        onDisconnect={disconnect}
         onSaveKey={saveKey}
       />
 
@@ -183,7 +188,7 @@ export default function Admin() {
         hint="Builds the cross-video narrative and writes scripts, captions, and hooks."
         providers={narrative}
         onSetActive={setActive}
-        onToggleConnect={toggleConnect}
+        onDisconnect={disconnect}
         onSaveKey={saveKey}
       />
 
